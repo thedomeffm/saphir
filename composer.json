@@ -1,0 +1,13 @@
+{
+    "name": "thedomeffm/saphir",
+    "description": "A simple PHP DynamoDB ODM",
+    "version": "dev-0.0.1",
+    "type": "library",
+    "license": "MIT",
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "TheDomeFfm\\Saphir\\": "src/"
+        }
+    }
+}
