@@ -8,10 +8,10 @@
  * under the MIT licence. No legal claims arise from its use.
  */
 
-namespace TheDomeFfm\Saphir\Attribute;
+namespace TheDomeFfm\Sapphire\Attribute;
 
-use TheDomeFfm\Saphir\Exception\InvalidFieldTypeException;
-use TheDomeFfm\Saphir\Exception\UnsupportedFieldTypeException;
+use TheDomeFfm\Sapphire\Exception\InvalidFieldTypeException;
+use TheDomeFfm\Sapphire\Exception\UnsupportedFieldTypeException;
 
 /**
  * @author: thedomeffm

@@ -8,7 +8,7 @@
  * under the MIT licence. No legal claims arise from its use.
  */
 
-namespace TheDomeFfm\Saphir\Exception;
+namespace TheDomeFfm\Sapphire\Exception;
 
 class UnsupportedFieldTypeException extends \Exception
 {

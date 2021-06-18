@@ -8,7 +8,7 @@
  * under the MIT licence. No legal claims arise from its use.
  */
 
-namespace TheDomeFfm\Saphir\Attribute;
+namespace TheDomeFfm\Sapphire\Attribute;
 
 #[\Attribute(\Attribute::TARGET_CLASS)]
 final class DynamoClass

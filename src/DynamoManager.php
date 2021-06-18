@@ -8,12 +8,12 @@
  * under the MIT licence. No legal claims arise from its use.
  */
 
-namespace TheDomeFfm\Saphir;
+namespace TheDomeFfm\Sapphire;
 
-use TheDomeFfm\Saphir\Attribute\DynamoClass;
-use TheDomeFfm\Saphir\Attribute\DynamoField;
-use TheDomeFfm\Saphir\Exception\CastException;
-use TheDomeFfm\Saphir\Exception\DynamoClassException;
+use TheDomeFfm\Sapphire\Attribute\DynamoClass;
+use TheDomeFfm\Sapphire\Attribute\DynamoField;
+use TheDomeFfm\Sapphire\Exception\CastException;
+use TheDomeFfm\Sapphire\Exception\DynamoClassException;
 
 final class DynamoManager
 {

@@ -8,9 +8,9 @@
  * under the MIT licence. No legal claims arise from its use.
  */
 
-namespace TheDomeFfm\Saphir;
+namespace TheDomeFfm\Sapphire;
 
-use TheDomeFfm\Saphir\Exception\CastException;
+use TheDomeFfm\Sapphire\Exception\CastException;
 
 final class Caster
 {
