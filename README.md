@@ -47,8 +47,7 @@ class Product
 }
 ```
 
-Wehen you use typed properties the ODM will try to cast the properties
-to the most useful way (see $name).
+You can use typed properties and the ODM will try to cast the properties in the most useful way (see $name).
 
 You can also type them manually (see $id).
 
@@ -70,9 +69,9 @@ $getItem = [
     ]
 ];
 
-$domain = $dynamoDbClient->getItem($getItem)->getItem();
+$product = $dynamoDbClient->getItem($getItem)->getItem();
 
-$domain = $dm->getObject($domain, Product::class);
+$product = $dm->getObject($product, Product::class);
 ```
 
 ### Cast your PHP Object to AWS DynamoDB Item 
@@ -81,12 +80,12 @@ $domain = $dm->getObject($domain, Product::class);
 
 // ...
 
-$domain = new Product();
-$domain->name = $form['name'];
-$domain->group = $form['group'];
+$product = new Product();
+$product->name = $form['name'];
+$product->group = $form['group'];
 
 $dm = new DynamoManager();
 
-$putItem = $dm->preparePutAction($domain);
+$putItem = $dm->preparePutAction($product);
 $dynamoDbClient->putItem($putItem);
 ```
