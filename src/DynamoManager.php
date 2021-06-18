@@ -13,7 +13,9 @@ namespace TheDomeFfm\Sapphire;
 use TheDomeFfm\Sapphire\Attribute\DynamoClass;
 use TheDomeFfm\Sapphire\Attribute\DynamoField;
 use TheDomeFfm\Sapphire\Exception\CastException;
+use TheDomeFfm\Sapphire\Exception\ClassNotFoundException;
 use TheDomeFfm\Sapphire\Exception\DynamoClassException;
+use TheDomeFfm\Sapphire\Exception\NullException;
 
 final class DynamoManager implements DynamoManagerInterface
 {
@@ -160,10 +162,17 @@ final class DynamoManager implements DynamoManagerInterface
      */
     public function getTableName(object|string $object): string
     {
-        // todo: probably make a check before with class_exists()
-
         if (is_string($object)) {
-            $object = new $object;
+            if (!class_exists($object)) {
+                throw new ClassNotFoundException(
+                    sprintf(
+                        'Can\'t find class \'%s\'',
+                        $object,
+                    )
+                );
+            }
+
+            $object = $this->instantiateClass($object);
         }
 
         $reflection = new \ReflectionClass($object);
@@ -188,13 +197,29 @@ final class DynamoManager implements DynamoManagerInterface
      */
     public function getObject($awsObject, object|string $object): object
     {
-        // todo: probably make a check before with class_exists()
-
         if (is_string($object)) {
+            if (!class_exists($object)) {
+                throw new ClassNotFoundException(
+                    sprintf(
+                        'Can\'t find class \'%s\'',
+                        $object,
+                    )
+                );
+            }
+
             $object = $this->instantiateClass($object);
         }
 
         $reflection = new \ReflectionClass($object);
+
+        /** @var ?DynamoClass $dynamoClass */
+        $dynamoClass = $reflection->getAttributes(DynamoClass::class)
+            ? $reflection->getAttributes(DynamoClass::class)[0]->newInstance()
+            : null;
+
+        if (!$dynamoClass) {
+            throw new DynamoClassException('Given object has no DynamoClass Attribute!');
+        }
 
         foreach ($reflection->getProperties() as $property) {
             /** @var DynamoField $dynProperty */
@@ -202,18 +227,36 @@ final class DynamoManager implements DynamoManagerInterface
                 ? $property->getAttributes(DynamoField::class)[0]->newInstance()
                 : null;
 
+            // skip statics
             if (!$dynProperty || $property->isStatic()) {
                 continue;
             }
 
+            // Check that key exist in awsObject
+            if (!isset($awsObject[$property->getName()])) {
+                continue;
+            }
+
+            // make it accessible
             if ($property->isPrivate() || $property->isProtected()) {
                 $property->setAccessible(true);
             }
 
-            /**
-             * Check if value is null
-             */
+            // if value is null, set it immediately
             if ($awsObject[$property->getName()]->getNull()) {
+                // check if property is typed and it is allowed to be null
+                $type = $property->getType();
+                if ($type && $type->allowsNull()) {
+                    $property->setValue($object, null);
+                } else {
+                    throw new NullException(
+                        sprintf(
+                            'Can\'t set the value of \'%s\', because it is typed and not allowed to be null, but got null from DynamoDB!',
+                            $property->getName()
+                        )
+                    );
+                }
+                // if nut typed just set null value
                 $property->setValue($object, null);
 
                 continue;
