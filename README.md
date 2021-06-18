@@ -17,6 +17,9 @@ or the [aws-sdk](https://github.com/aws/aws-sdk-php) in order to work with AWS D
 You add Attributes to your PHP Classes and with the help of the
 DynamoManager you can convert to PHP Object to an Array that the AWS-SDK or async-aws can work with and vice versa.
 
+## Info
+This library is WIP.
+
 ## Example
 
 ```php

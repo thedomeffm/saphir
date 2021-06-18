@@ -14,6 +14,24 @@ use TheDomeFfm\Sapphire\Exception\CastException;
 
 final class Caster
 {
+    public static function phpTypeToDynamoType(string $phpType): string
+    {
+        dump($phpType);
+        return match ($phpType) {
+            'null' => 'NULL',
+            'string' => 'S',
+            'int' => 'N',
+            'float' => 'N',
+            'bool' => 'BOOL',
+            'object' => 'S',
+            'array' => 'S',
+            // TODO: add the more complex types also
+            default => throw new CastException(
+                sprintf('Can\'t cast %s to an equivalent DynamoDB type!', $phpType)
+            )
+        };
+    }
+
     /**
      * @param $value
      * @return string|null
