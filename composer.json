@@ -2,7 +2,7 @@
     "name": "thedomeffm/sapphire",
     "description": "A simple PHP DynamoDB ODM",
     "homepage": "https://github.com/thedomeffm/sapphire",
-    "version": "dev-0.0.1",
+    "version": "0.0.1",
     "type": "library",
     "license": "MIT",
     "keywords": [
