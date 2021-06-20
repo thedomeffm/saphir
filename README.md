@@ -183,20 +183,26 @@ class Product
 > See [documentation](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_AttributeValue.html)
 
 ### Binary
+> You need to use `string` or `?string` to use `isBinary`!
+
 ```php
 #[DynamoClass('customers')]
 class Customer
 {
-    #[DynamoField]
-    private ?string $id;
-
+    // ...
+    
     #[DynamoField(isBinary: true)]
-    public ?string $blob = 'myBinaryString';
+    public ?string $icon = null;
     
     // ...
 }
+
+
+$customer = new Customer();
+// ...
+$customer->icon = file_get_contents('user_icon.png');
 ```
 
 > **INFO**
-> The async-aws (and also the aws-sdk) convert your string to base64_encode.
-> So you can pass a string without the hassle to convert something.
+> The value will be converted to base64!
+> If you need the binary use `base64_decode()` on the property.

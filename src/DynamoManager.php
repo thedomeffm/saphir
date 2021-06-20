@@ -36,6 +36,12 @@ final class DynamoManager
         ];
     }
 
+    /**
+     * @param object $object
+     * @return array
+     * @throws CastException
+     * @throws UntypedPropertyException
+     */
     public function toDynamoItem(object $object): array
     {
         $reflection = new \ReflectionClass($object);
@@ -159,6 +165,7 @@ final class DynamoManager
      * @param array $objects
      * @return array
      * @throws CastException
+     * @throws UntypedPropertyException
      */
     public function toDynamoItems(array $objects): array
     {
@@ -174,8 +181,8 @@ final class DynamoManager
     /**
      * @param object|string $object
      * @return string
+     * @throws ClassNotFoundException
      * @throws DynamoClassException
-     * @throws \ReflectionException
      */
     public function getTableName(object|string $object): string
     {
@@ -199,7 +206,10 @@ final class DynamoManager
      * @param $awsObject
      * @param object|string $object
      * @return object
-     * @throws \ReflectionException
+     * @throws CastException
+     * @throws ClassNotFoundException
+     * @throws DynamoClassException
+     * @throws UntypedPropertyException
      */
     public function toPhpObject($awsObject, object|string $object): object
     {
@@ -277,6 +287,11 @@ final class DynamoManager
             $type = $typedProperty->getName();
 
             if ($typedProperty->isBuiltin() && 'array' !== $type) {
+                if ('string' === $type && $dynProperty->isBinary()) {
+                    $property->setValue($object, (string) $awsObject[$property->getName()]->getB());
+
+                    continue;
+                }
                 if ('string' === $type) {
                     $property->setValue($object, (string) $awsObject[$property->getName()]->getS());
 
@@ -346,8 +361,9 @@ final class DynamoManager
     }
 
     /**
-     * @param string $class
+     * @param string|object $class
      * @return object
+     * @throws ClassNotFoundException
      */
     private function instantiateClass(string|object $class): object
     {
