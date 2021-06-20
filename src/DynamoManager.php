@@ -11,13 +11,14 @@
 namespace TheDomeFfm\Sapphire;
 
 use TheDomeFfm\Sapphire\Attribute\DynamoClass;
+use TheDomeFfm\Sapphire\Attribute\DynamoEmbeddedClass;
 use TheDomeFfm\Sapphire\Attribute\DynamoField;
 use TheDomeFfm\Sapphire\Exception\CastException;
 use TheDomeFfm\Sapphire\Exception\ClassNotFoundException;
 use TheDomeFfm\Sapphire\Exception\DynamoClassException;
-use TheDomeFfm\Sapphire\Exception\NullException;
+use TheDomeFfm\Sapphire\Exception\UntypedPropertyException;
 
-final class DynamoManager implements DynamoManagerInterface
+final class DynamoManager
 {
     /**
      * @param object $object
@@ -25,6 +26,7 @@ final class DynamoManager implements DynamoManagerInterface
      * @throws CastException
      * @throws DynamoClassException
      * @throws \ReflectionException
+     * @throws UntypedPropertyException
      */
     public function preparePutAction(object $object): array
     {
@@ -34,11 +36,6 @@ final class DynamoManager implements DynamoManagerInterface
         ];
     }
 
-    /**
-     * @param object $object
-     * @return array
-     * @throws CastException
-     */
     public function toDynamoItem(object $object): array
     {
         $reflection = new \ReflectionClass($object);
@@ -55,6 +52,7 @@ final class DynamoManager implements DynamoManagerInterface
                 ? $property->getAttributes(DynamoField::class)[0]->newInstance()
                 : null;
 
+            /** Skip property if it is not a DynamoField (or static) */
             if ($dynProperty === null || $property->isStatic()) {
                 continue;
             }
@@ -65,74 +63,93 @@ final class DynamoManager implements DynamoManagerInterface
                 $property->setAccessible(true);
             }
 
+            /** @var ?\ReflectionNamedType $typedProperty */
+            $typedProperty = $property->getType();
+
+            if (!$typedProperty) {
+                throw new UntypedPropertyException(
+                    sprintf(
+                        'The property \'%s\' in \'%s\' is not typed, but marked as an DynamoField!',
+                        $property->getName(),
+                        get_class($object),
+                    )
+                );
+            }
+
             if ($property->getValue($object) === null) {
                 $item[$property->getName()] = ['NULL' => true];
 
                 continue;
             }
 
-            if ($dynProperty->getFieldType() === DynamoField::AUTO_DETECTION) {
-                /** @var ?\ReflectionNamedType $typedProperty */
-                $typedProperty = $property->getType();
+            if ($dynProperty->isBinary()) {
+                $item[$property->getName()] = ['B' => $property->getValue($object)];
 
-                if (!$typedProperty) {
+                continue;
+            }
+
+            $type = $typedProperty->getName();
+
+            if ($typedProperty->isBuiltin() && $type !== 'array') {
+                $item[$property->getName()] = DynamoCaster::castBuiltinField($type, $property->getValue($object));
+            } elseif ($type === 'array') {
+                $arrayType = $dynProperty->getArrayType();
+
+                if (!$arrayType) {
                     throw new CastException(
                         sprintf(
-                            'The given property \'%s\' in \'%s\' has no explicit FieldType and is not typed!',
+                            'For the array typed property \'%s\' in \'%s\' you have to provide a array type!',
                             $property->getName(),
                             get_class($object),
                         )
                     );
                 }
-                if (!$typedProperty->isBuiltin()) {
-                    throw new CastException(
-                        sprintf(
-                            'The given property \'%s\' in \'%s\' does not use PHP builtin type. Given type \'%s\'. This is (at least for now) not supported!',
-                            $property->getName(),
-                            $typedProperty->getName(),
-                            get_class($object),
-                        )
-                    );
-                }
 
-                $type = $typedProperty->getName();
-                if (in_array($type, ['string', 'float', 'int'])) {
-                    $item[$property->getName()] = [Caster::phpTypeToDynamoType($type) => Caster::toString($property->getValue($object))];
+                if (DynamoField::STRING_ARRAY === $arrayType) {
+                    $item[$property->getName()] = ['SS' => $property->getValue($object)];
 
                     continue;
                 }
-                if ($type === 'bool') {
-                    $item[$property->getName()] = [Caster::phpTypeToDynamoType($type) => Caster::toBool($property->getValue($object))];
+
+                if (DynamoField::NUMBER_ARRAY === $arrayType) {
+                    $castedArray = [];
+                    foreach ($property->getValue($object) as $value) {
+                        $castedArray[] = (string) $value;
+                    }
+                    $item[$property->getName()] = ['NS' => $castedArray];
 
                     continue;
                 }
-                if ($type === 'object') {
-                    $item[$property->getName()] = [Caster::phpTypeToDynamoType($type) => Caster::toBool($property->getValue($object))];
+
+                if (DynamoField::MIXED_ARRAY === $arrayType) {
+                    $castedArray = [];
+                    foreach ($property->getValue($object) as $value) {
+                        $castedArray[] = DynamoCaster::castBuiltinField(gettype($value), $value);
+                    }
+                    $item[$property->getName()] = ['L' => $castedArray];
 
                     continue;
                 }
-                if ($type === 'array') {
-                    $item[$property->getName()] = [Caster::phpTypeToDynamoType($type) => Caster::toBool($property->getValue($object))];
+
+                if (DynamoField::BINARY_ARRAY === $arrayType) {
+                    $item[$property->getName()] = ['BS' => $property->getValue($object)];
 
                     continue;
                 }
-            }
-
-            if (in_array($dynProperty->getFieldType(), ['S', 'N'])) {
-                $item[$property->getName()] = [$dynProperty->getFieldType() => Caster::toString($property->getValue($object))];
-
-                continue;
-            }
-
-            if ($dynProperty->getFieldType() === 'BOOL') {
-                $item[$property->getName()] = [$dynProperty->getFieldType() => Caster::toBool($property->getValue($object))];
-
-                continue;
+            } else {
+                $item[$property->getName()] = [
+                    'M' => $this->toDynamoItem($property->getValue($object))
+                ];
             }
         }
 
         if (!$atLeastOneDynProperty) {
-            throw new CastException('The given object does not contain a single property that is marked as DynamoField!');
+            throw new CastException(
+                sprintf(
+                    'The given object \'%s\' does not contain a single property that is marked as DynamoField!',
+                    get_class($object),
+                )
+            );
         }
 
         return $item;
@@ -162,27 +179,16 @@ final class DynamoManager implements DynamoManagerInterface
      */
     public function getTableName(object|string $object): string
     {
-        if (is_string($object)) {
-            if (!class_exists($object)) {
-                throw new ClassNotFoundException(
-                    sprintf(
-                        'Can\'t find class \'%s\'',
-                        $object,
-                    )
-                );
-            }
-
-            $object = $this->instantiateClass($object);
-        }
+        $object = $this->instantiateClass($object);
 
         $reflection = new \ReflectionClass($object);
 
         /** @var ?DynamoClass $dynamoClass */
-        $dynamoClass =$reflection->getAttributes(DynamoClass::class)
+        $dynamoClass = $reflection->getAttributes(DynamoClass::class)
             ? $reflection->getAttributes(DynamoClass::class)[0]->newInstance()
             : null;
 
-        if (!$dynamoClass) {
+        if (!$dynamoClass instanceof DynamoClass) {
             throw new DynamoClassException('Given object has no DynamoClass Attribute!');
         }
 
@@ -195,30 +201,27 @@ final class DynamoManager implements DynamoManagerInterface
      * @return object
      * @throws \ReflectionException
      */
-    public function getObject($awsObject, object|string $object): object
+    public function toPhpObject($awsObject, object|string $object): object
     {
-        if (is_string($object)) {
-            if (!class_exists($object)) {
-                throw new ClassNotFoundException(
-                    sprintf(
-                        'Can\'t find class \'%s\'',
-                        $object,
-                    )
-                );
-            }
-
-            $object = $this->instantiateClass($object);
-        }
+        /** @var object $object */
+        $object = $this->instantiateClass($object);
 
         $reflection = new \ReflectionClass($object);
 
-        /** @var ?DynamoClass $dynamoClass */
-        $dynamoClass = $reflection->getAttributes(DynamoClass::class)
-            ? $reflection->getAttributes(DynamoClass::class)[0]->newInstance()
-            : null;
+        if (!$reflection->getAttributes(DynamoEmbeddedClass::class)) {
+            /** @var ?DynamoClass $dynamoClass */
+            $dynamoClass = $reflection->getAttributes(DynamoClass::class)
+                ? $reflection->getAttributes(DynamoClass::class)[0]->newInstance()
+                : null;
 
-        if (!$dynamoClass) {
-            throw new DynamoClassException('Given object has no DynamoClass Attribute!');
+            if (!$dynamoClass instanceof DynamoClass) {
+                throw new DynamoClassException(
+                    sprintf(
+                        'Given object \'%s\' has no #[DynamoClass] Attribute and is also not marked as #[DynamoEmbeddedClass]',
+                        get_class($object),
+                    )
+                );
+            }
         }
 
         foreach ($reflection->getProperties() as $property) {
@@ -242,103 +245,100 @@ final class DynamoManager implements DynamoManagerInterface
                 $property->setAccessible(true);
             }
 
+            /** @var ?\ReflectionNamedType $typedProperty */
+            $typedProperty = $property->getType();
+
+            if (!$typedProperty) {
+                throw new UntypedPropertyException(
+                    sprintf(
+                        'The property \'%s\' in \'%s\' is not typed, but marked as an DynamoField!',
+                        $property->getName(),
+                        get_class($object),
+                    )
+                );
+            }
+
             // if value is null, set it immediately
             if ($awsObject[$property->getName()]->getNull()) {
-                // check if property is typed and it is allowed to be null
-                $type = $property->getType();
-                if ($type && $type->allowsNull()) {
-                    $property->setValue($object, null);
-                } else {
-                    throw new NullException(
+                if (!$typedProperty->allowsNull()) {
+                    throw new CastException(
                         sprintf(
-                            'Can\'t set the value of \'%s\', because it is typed and not allowed to be null, but got null from DynamoDB!',
+                            'Typed property \'%s\' can\'t be null, but got null!',
                             $property->getName()
                         )
                     );
                 }
-                // if nut typed just set null value
+
                 $property->setValue($object, null);
 
                 continue;
             }
 
-            if ($dynProperty->getFieldType() === DynamoField::AUTO_DETECTION) {
-                /** @var ?\ReflectionNamedType $typedProperty */
-                $typedProperty = $property->getType();
+            $type = $typedProperty->getName();
 
-                if (!$typedProperty) {
-                    throw new CastException(
-                        sprintf(
-                            'The given property \'%s\' in \'%s\' has no explicit FieldType and is not typed!',
-                            $property->getName(),
-                            get_class($object),
-                        )
-                    );
-                }
-                if (!$typedProperty->isBuiltin()) {
-                    throw new CastException(
-                        sprintf(
-                            'The given property \'%s\' in \'%s\' does not use PHP builtin type. Given type \'%s\'. This is (at least for now) not supported!',
-                            $property->getName(),
-                            $typedProperty->getName(),
-                            get_class($object),
-                        )
-                    );
-                }
-
-                $type = $typedProperty->getName();
-                if ($type === 'string') {
+            if ($typedProperty->isBuiltin() && 'array' !== $type) {
+                if ('string' === $type) {
                     $property->setValue($object, (string) $awsObject[$property->getName()]->getS());
 
                     continue;
                 }
-                if ($type === 'int') {
+                if ('int' === $type) {
                     $property->setValue($object, (int) $awsObject[$property->getName()]->getN());
 
                     continue;
                 }
-                if ($type === 'float') {
+                if ('float' === $type) {
                     $property->setValue($object, (float) $awsObject[$property->getName()]->getN());
 
                     continue;
                 }
-                if ($type === 'bool') {
-                    $property->setValue($object, (bool) $awsObject[$property->getName()]->getS());
+                if ('bool' === $type) {
+                    $property->setValue($object, (bool) $awsObject[$property->getName()]->getBool());
 
                     continue;
                 }
-                if ($type === 'object') {
+                if ('bool' === $type) {
                     $property->setValue($object, json_decode($awsObject[$property->getName()]->getS(), false, JSON_THROW_ON_ERROR));
 
                     continue;
                 }
-                if ($type === 'array') {
-                    $property->setValue($object, json_decode($awsObject[$property->getName()]->getS(), true, JSON_THROW_ON_ERROR));
+            } elseif ('array' === $type) {
+                $arrayType = $dynProperty->getArrayType();
+
+                if (DynamoField::STRING_ARRAY === $arrayType) {
+                    $property->setValue($object, $awsObject[$property->getName()]->getSs());
 
                     continue;
                 }
-            }
 
-            if ($dynProperty->getFieldType() === 'S') {
-                $property->setValue($object, (string) $awsObject[$property->getName()]->getS());
+                if (DynamoField::NUMBER_ARRAY === $arrayType) {
+                    $property->setValue($object, $awsObject[$property->getName()]->getNs());
 
-                continue;
-            }
-
-            if ($dynProperty->getFieldType() === 'N') {
-                if ($dynProperty->isInteger()) {
-                    $property->setValue($object, (int) $awsObject[$property->getName()]->getN());
-                } else {
-                    $property->setValue($object, (float) $awsObject[$property->getName()]->getN());
+                    continue;
                 }
 
-                continue;
-            }
+                if (DynamoField::MIXED_ARRAY === $arrayType) {
+                    $property->setValue($object, $awsObject[$property->getName()]->getL());
 
-            if ($dynProperty->getFieldType() === 'BOOL') {
-                $property->setValue($object, (bool) $awsObject[$property->getName()]->getB());
+                    continue;
+                }
 
-                continue;
+                if (DynamoField::BINARY_ARRAY === $arrayType) {
+                    $castedArray = [];
+                    foreach ($awsObject[$property->getName()]->getBs() as $item) {
+                        if ('' === $item) {
+                            $castedArray[] = null;
+
+                            continue;
+                        }
+                        $castedArray[] = $item;
+                    }
+                    $property->setValue($object, $castedArray);
+
+                    continue;
+                }
+            } else {
+                $property->setValue($object, $this->toPhpObject($awsObject[$property->getName()]->getM(), $property->getType()->getName()));
             }
         }
 
@@ -349,8 +349,21 @@ final class DynamoManager implements DynamoManagerInterface
      * @param string $class
      * @return object
      */
-    private function instantiateClass(string $class): object
+    private function instantiateClass(string|object $class): object
     {
+        if (is_object($class)) {
+            return $class;
+        }
+
+        if (!class_exists($class)) {
+            throw new ClassNotFoundException(
+                sprintf(
+                    'Can\'t find class \'%s\'',
+                    $class,
+                )
+            );
+        }
+
         return clone unserialize(sprintf('O:%d:"%s":0:{}', strlen($class), $class));
     }
 }

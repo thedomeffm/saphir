@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /**
  * @author: thedomeffm
@@ -9,9 +9,6 @@
  */
 
 namespace TheDomeFfm\Sapphire\Attribute;
-
-use TheDomeFfm\Sapphire\Exception\InvalidFieldTypeException;
-use TheDomeFfm\Sapphire\Exception\UnsupportedFieldTypeException;
 
 /**
  * @author: thedomeffm
@@ -24,10 +21,22 @@ use TheDomeFfm\Sapphire\Exception\UnsupportedFieldTypeException;
 #[\Attribute(\Attribute::TARGET_PROPERTY)]
 final class DynamoField
 {
-    public CONST AUTO_DETECTION = 'auto';
+    public CONST ALLOWED_ARRAY_TYPES = [
+        self::MIXED_ARRAY,  // 'L'
+        self::STRING_ARRAY, // 'SS'
+        self::NUMBER_ARRAY, // 'NS'
+        self::BINARY_ARRAY, // 'BS'
+    ];
 
-    private CONST ALL_DYNAMO_FIELD_TYPES = [
-     self::AUTO_DETECTION,
+    public CONST MIXED_ARRAY = 'mixed';   // 'L'
+    public CONST STRING_ARRAY = 'string'; // 'SS'
+    public CONST NUMBER_ARRAY = 'number'; // 'NS'
+    public CONST BINARY_ARRAY = 'binary'; // 'BS'
+
+    /**
+     * @link https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_AttributeValue.html
+     */
+    public CONST DYNAMO_FIELD_TYPES = [
      'S',
      'N',
      'B',
@@ -40,73 +49,45 @@ final class DynamoField
      'BS',
     ];
 
-    private CONST CURRENTLY_SUPPORTED_FIELD_TYPES = [
-        self::AUTO_DETECTION,
-        'S',
-        'N',
-        'BOOL',
-    ];
+    private bool $isBinary;
 
     /**
-     * @var string
+     * @var string|null
      */
-    private string $fieldType;
-
-    /**
-     * @var bool
-     */
-    private bool $isInteger;
+    private ?string $arrayType;
 
     /**
      * DynamoField constructor.
-     *
-     * @param string $fieldType set a explicit dynamoDB field type
-     * @param bool $isInteger   if explicit 'N' type is set it will be cast to float by default
-     *
-     * @throws InvalidFieldTypeException
-     * @throws UnsupportedFieldTypeException
      */
-    public function __construct(string $fieldType = self::AUTO_DETECTION, bool $isInteger = false)
+    public function __construct(bool $isBinary = false, ?string $arrayType = null)
     {
-        if (!in_array($fieldType, self::ALL_DYNAMO_FIELD_TYPES)) {
-            $fieldTypes = implode(', ', self::ALL_DYNAMO_FIELD_TYPES);
-            throw new InvalidFieldTypeException(
+        $this->isBinary = $isBinary;
+
+        if (null !== $arrayType && in_array($arrayType, self::ALLOWED_ARRAY_TYPES)) {
+            throw new \InvalidArgumentException(
                 sprintf(
-                    'The given type %s does not exist! Official DynamoDB field types are %s',
-                    $fieldType,
-                    $fieldTypes
+                    'The given arrayType \'%s\' is not supported',
+                    $arrayType
                 )
             );
         }
 
-        if (!in_array($fieldType, self::CURRENTLY_SUPPORTED_FIELD_TYPES)) {
-            $supported = implode(', ', self::CURRENTLY_SUPPORTED_FIELD_TYPES);
-            throw new UnsupportedFieldTypeException(
-                sprintf(
-                    'The given type %s is currently not supported! Currently Supported field types are %s',
-                    $fieldType,
-                    $supported
-                )
-            );
-        }
-
-        $this->fieldType = $fieldType;
-        $this->isInteger = $isInteger;
-    }
-
-    /**
-     * @return string
-     */
-    public function getFieldType(): string
-    {
-        return $this->fieldType;
+        $this->arrayType = $arrayType;
     }
 
     /**
      * @return bool
      */
-    public function isInteger(): bool
+    public function isBinary(): bool
     {
-        return $this->isInteger;
+        return $this->isBinary;
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getArrayType(): ?string
+    {
+        return $this->arrayType;
     }
 }
