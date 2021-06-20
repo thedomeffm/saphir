@@ -1,7 +1,10 @@
 # SAPPHIRE
 
+`composer require thedomeffm/sapphire`
+
 ### Info
-> This library is WIP.
+> This library is WIP!
+> Not ready for production!
 
 ---
 
