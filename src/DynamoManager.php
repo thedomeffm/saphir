@@ -44,15 +44,11 @@ final class DynamoManager
      */
     public function toDynamoItem(object $object): array
     {
-        $reflection = new \ReflectionClass($object);
-
-        $properties = $reflection->getProperties();
-
         $item = [];
 
         $atLeastOneDynProperty = false;
 
-        foreach ($properties as $property) {
+        foreach ($this->getAllProperties($object) as $property) {
             /** @var DynamoField $dynProperty */
             $dynProperty = $property->getAttributes(DynamoField::class)
                 ? $property->getAttributes(DynamoField::class)[0]->newInstance()
@@ -234,7 +230,7 @@ final class DynamoManager
             }
         }
 
-        foreach ($reflection->getProperties() as $property) {
+        foreach ($this->getAllProperties($object) as $property) {
             /** @var DynamoField $dynProperty */
             $dynProperty = $property->getAttributes(DynamoField::class)
                 ? $property->getAttributes(DynamoField::class)[0]->newInstance()
@@ -361,6 +357,27 @@ final class DynamoManager
     }
 
     /**
+     * @param object $object
+     * @return array
+     */
+    private function getAllProperties(object $object): array
+    {
+        $properties = [];
+
+        $parent = new \ReflectionClass($object);
+        while ($parent) {
+            foreach ($parent->getProperties() as $property) {
+                if ($property->getDeclaringClass()->getName() === $parent->getName()) {
+                    $properties[] = $property;
+                }
+            }
+            $parent = $parent->getParentClass();
+        }
+
+        return $properties;
+    }
+
+    /**
      * @param string|object $class
      * @return object
      * @throws ClassNotFoundException
@@ -380,6 +397,11 @@ final class DynamoManager
             );
         }
 
+        /*
+         * todo: or use this way?
+         * $r = new \ReflectionClass($object)
+         * $r->newInstanceWithoutConstructor() ???
+         */
         return clone unserialize(sprintf('O:%d:"%s":0:{}', strlen($class), $class));
     }
 }
