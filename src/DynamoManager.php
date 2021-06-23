@@ -21,15 +21,28 @@ use TheDomeFfm\Sapphire\Exception\UntypedPropertyException;
 final class DynamoManager
 {
     /**
-     * @param object $object
+     * @param object|array $object The object(s) you want to convert to an array structure for DynamoDB
      * @return array
      * @throws CastException
+     * @throws ClassNotFoundException
      * @throws DynamoClassException
-     * @throws \ReflectionException
      * @throws UntypedPropertyException
      */
-    public function preparePutAction(object $object): array
+    public function putItemObject(object|array $object): array
     {
+        if (is_array($object)) {
+            if (count(array_filter($object, function ($entry) use ($object) {
+                    return !(get_class($entry) instanceof $object[0]);
+                })) > 0) {
+                throw new \InvalidArgumentException('The given objects are not the same class!');
+            }
+
+            return [
+                'TableName' => $this->getTableName($object),
+                'Item' => $this->toDynamoItems($object),
+            ];
+        }
+
         return [
             'TableName' => $this->getTableName($object),
             'Item' => $this->toDynamoItem($object),
@@ -37,7 +50,7 @@ final class DynamoManager
     }
 
     /**
-     * @param object $object
+     * @param object $object The object you want to convert to an array structure for DynamoDB
      * @return array
      * @throws CastException
      * @throws UntypedPropertyException
@@ -158,7 +171,7 @@ final class DynamoManager
     }
 
     /**
-     * @param array $objects
+     * @param array $objects The objects you want to convert to an array structure for DynamoDB
      * @return array
      * @throws CastException
      * @throws UntypedPropertyException
@@ -175,7 +188,7 @@ final class DynamoManager
     }
 
     /**
-     * @param object|string $object
+     * @param object|string $object Object or FQCN of your PHP Class
      * @return string
      * @throws ClassNotFoundException
      * @throws DynamoClassException
@@ -199,15 +212,15 @@ final class DynamoManager
     }
 
     /**
-     * @param $awsObject
-     * @param object|string $object
+     * @param array $awsObject The AWS response
+     * @param object|string $object Object or FQCN of your PHP Class
      * @return object
      * @throws CastException
      * @throws ClassNotFoundException
      * @throws DynamoClassException
      * @throws UntypedPropertyException
      */
-    public function toPhpObject($awsObject, object|string $object): object
+    public function toPhpObject(array $awsObject, object|string $object): object
     {
         /** @var object $object */
         $object = $this->instantiateClass($object);
@@ -354,6 +367,28 @@ final class DynamoManager
         }
 
         return $object;
+    }
+
+    /**
+     * @param array|\Generator $awsObjects The AWS response
+     * @param string|object $phpObject Object or FQCN of your PHP Class
+     * @return array
+     * @throws CastException
+     * @throws ClassNotFoundException
+     * @throws DynamoClassException
+     * @throws UntypedPropertyException
+     */
+    public function toPhpObjects(array|\Generator $awsObjects, string|object $phpObject): array
+    {
+        $object = $this->instantiateClass($phpObject);
+
+        $phpObjects = [];
+
+        foreach ($awsObjects as $awsObject) {
+            $phpObjects[] = $this->toPhpObject($awsObject, $object);
+        }
+
+        return $phpObjects;
     }
 
     /**
