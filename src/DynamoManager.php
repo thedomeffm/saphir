@@ -30,7 +30,7 @@ final class DynamoManager
      */
     public function putItemObject(object|array $object): array
     {
-        if (is_array($object) && count($object) > 0) {
+        if (is_array($object) && count($object) > 1) {
             if (count(array_filter($object, function ($entry) use ($object) {
                     return !(get_class($entry) instanceof $object[0]);
                 })) > 0) {
