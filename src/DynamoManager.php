@@ -38,7 +38,7 @@ final class DynamoManager
             }
 
             return [
-                'TableName' => $this->getTableName($object),
+                'TableName' => $this->getTableName($object[0]),
                 'Item' => $this->toDynamoItems($object),
             ];
         }
