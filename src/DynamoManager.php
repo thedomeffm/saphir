@@ -30,8 +30,8 @@ final class DynamoManager
      */
     public function putItemObject(object|array $object): array
     {
-        if (is_array($object) && count($object) > 1) {
-            if (count(array_filter($object, function ($entry) use ($object) {
+        if (is_array($object)) {
+            if (count($object) > 1 && count(array_filter($object, function ($entry) use ($object) {
                     return !(get_class($entry) instanceof $object[0]);
                 })) > 0) {
                 throw new \InvalidArgumentException('The given objects are not the same class!');
